@@ -185,6 +185,98 @@
   #arch-5 .arch-hit{ clip-path: polygon(20.23% 0%, 81.32% 0%, 100% 27.01%, 100% 96.92%, 96.86% 100%, 3.00% 100%, 0% 96.92%, 0% 26.39%); }
   #arch-6 .arch-hit{ clip-path: polygon(16.98% 0%, 84.43% 0%, 100% 27.01%, 100% 96.92%, 96.86% 100%, 3.00% 100%, 0% 96.92%, 0% 26.39%); }
 
+  /* ---------- Global Reserve — вход в Scene 0 (см. #gr-arrival ниже) ----------
+     На время влёта в арку "Global Reserve" гасим остальные 5 арок и
+     общий hover-слой (кастомный курсор), чтобы ничего не отвлекало от
+     арки, в которую "влетает" камера, и чтобы под overlay не оставалось
+     кликабельных/наводимых элементов. Сам arch-2 сюда не входит — он в
+     это время сначала быстро прячется (см. .gr-hide), а на его месте
+     "летит" фронтальная картинка #gr-flight (см. ниже). */
+  body.gr-entering .arch-interactive:not(#arch-2){
+    transition:opacity 0.35s ease;
+    opacity:0;
+    pointer-events:none;
+  }
+  body.gr-entering .cursor-dot,
+  body.gr-entering .cursor-ring{
+    transition:opacity 0.3s ease;
+    opacity:0;
+    pointer-events:none;
+  }
+
+  /* Реальная (перекошенная matrix3d corner-pin) арка в стене на время
+     полёта прячется быстрым fade (~100ms) — на её месте тут же
+     появляется #gr-flight (см. ниже), поэтому подмена картинки не
+     считывается глазом. Только opacity — transform/matrix3d арки не
+     трогаем вообще, поэтому её собственный perspective-перекос никогда
+     не участвует в zoom (в отличие от прежней версии). */
+  #arch-2.gr-hide{
+    transition:opacity 0.1s linear;
+    opacity:0;
+  }
+
+  /* ---------- Global Reserve — "полёт" через арку (gr-flight) ----------
+     Независимый от сцены/matrix3d слой: фронтальное, неискажённое
+     изображение арки (arches-new/2.png, а не cropped-new/2.png из стены)
+     в экранных координатах текущей арки. Сам #gr-flight как контейнер
+     НЕ масштабируется и не двигается — растёт только <img> внутри него
+     (GSAP управляет scale/filter), поэтому центр роста — центр арки на
+     экране, а не левый верхний угол контейнера. */
+  #gr-flight{
+    position:fixed;
+    z-index:75; /* выше сцены и погашенных арок, ниже #modal-overlay (80) */
+    opacity:0; /* дальше opacity целиком в руках GSAP (появление и phase 3 fade-out) — без CSS-transition, чтобы не спорить с таймлайном */
+    pointer-events:none;
+    transform:none;
+  }
+  #gr-flight img{
+    display:block;
+    width:100%;
+    height:100%;
+    pointer-events:none;
+    -webkit-user-drag:none;
+    user-select:none;
+    transform-origin:50% 50%;
+    will-change:transform, filter;
+  }
+
+  /* ---------- Global Reserve — Scene 0 (arrival) ----------
+     Полноэкранный overlay поверх сцены (но ниже #modal-overlay), в
+     который на пике phase 3 (см. JS) кросс-фейдит #gr-flight — засветка/
+     blur как раз маскируют стык со первым кадром зацикленного
+     видео-эмбиента (arrival-idle.mp4), без звука и без Джии (см. TODO в
+     разметке). */
+  #gr-arrival{
+    position:fixed;
+    inset:0;
+    z-index:70;
+    opacity:0;
+    visibility:hidden;
+    pointer-events:none;
+    background:#0a0a0a;
+    transition:opacity 0.5s ease, visibility 0s linear 0.5s;
+  }
+  #gr-arrival.video-visible{
+    opacity:1;
+    transition:opacity 0.5s ease, visibility 0s linear 0s;
+  }
+  #gr-arrival.active{ visibility:visible; }
+  /* Пока GSAP сам анимирует opacity #gr-arrival (полёт, phase 3) — гасим
+     штатный CSS-transition, чтобы он не "тянул" каждое инлайновое
+     значение ещё на 0.5s поверх таймлайна. Снимается сразу по окончании
+     кросс-фейда, дальше (например, exitGlobalReserve) снова работает
+     обычный CSS-переход. */
+  #gr-arrival.gr-instant{ transition:none; }
+  #gr-arrival-video{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    object-fit:cover;
+  }
+  @media (prefers-reduced-motion: reduce){
+    #gr-arrival{ transition:opacity 0.3s ease, visibility 0s linear 0.3s; }
+    #gr-arrival.video-visible{ transition:opacity 0.3s ease, visibility 0s linear 0s; }
+  }
+
   #guideSvg{ position:absolute; top:0; left:0; width:3688px; height:905px; pointer-events:none; display:none; }
   body.show-guides #guideSvg{ display:block; }
   #guideSvg polygon{ fill:rgba(0,201,122,.12); stroke:#00c97a; stroke-width:2.5; }
@@ -420,10 +512,22 @@
   </div>
 </div>
 
+<!-- Global Reserve — Scene 0 (arrival): прямой потомок body, как и modal-overlay,
+     вне трансформированной сцены. Показывается только через
+     enterGlobalReserve() после клика по арке "Global Reserve" (arch-2). -->
+<div id="gr-arrival" aria-hidden="true">
+  <video id="gr-arrival-video" muted loop playsinline preload="auto">
+    <source src="scenes/global-reserve/arrival-idle.mp4" type="video/mp4">
+  </video>
+  <!-- TODO: Gia появляется начиная со Scene 1 (см. PDF-скрипт), в Scene 0
+       сознательно отсутствует в этой версии -->
+</div>
+
 <!-- Кастомный курсор: тоже прямой потомок body, вне трансформированной сцены. -->
 <div class="cursor-dot" aria-hidden="true"></div>
 <div class="cursor-ring" aria-hidden="true"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/gsap.min.js"></script>
 <script>
   const CORNERS = {
     1: {TL:[162,178], TR:[515,217], BR:[515,731], BL:[162,757], title:"1 · Experience"},
@@ -676,6 +780,15 @@
     const cursorRing = document.querySelector('.cursor-ring');
     if (!arches.length || !overlay || !card || !titleEl || !descEl || !closeBtn) return;
 
+    // ---------- Global Reserve — вход в Scene 0 (arrival), вместо openModal ----------
+    // Только для arch-2 (data-section="globalReserve"): клик запускает
+    // "влёт" камеры через арку вместо заглушки-модалки. Остальные 5 арок
+    // и вся их hover/parallax-логика не затрагиваются.
+    const arch2 = document.getElementById('arch-2');
+    const grOverlay = document.getElementById('gr-arrival');
+    const grVideo = document.getElementById('gr-arrival-video');
+    let grActive = false; // отдельно от isOpen модалки — arch-2 не открывает #modal-overlay
+
     const reduceMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     const finePointerQuery = window.matchMedia('(hover: hover) and (pointer: fine)');
 
@@ -741,7 +854,141 @@
       if (event.target === overlay) closeModal();
     });
 
+    // ---------- Global Reserve — Scene 0: влёт через арку + видео-луп покоя ----------
+    // GSAP используется вместо ручного requestAnimationFrame специально
+    // ради явного timeline из 3 последовательных фаз (см. ниже) — тайминг
+    // и easing каждой фазы правится в одном месте, без ручного счёта кадров.
+    function enterGlobalReserve(archEl) {
+      if (grActive || !grOverlay || !grVideo || typeof gsap === 'undefined') return;
+      grActive = true;
+      clearAllHover();
+      // Гасим остальные арки/курсор (CSS, см. body.gr-entering выше).
+      document.body.classList.add('gr-entering');
+
+      // Экранные координаты ТЕКУЩЕЙ (перекошенной matrix3d) арки прямо
+      // сейчас — именно на этом месте появится фронтальная картинка полёта.
+      const rect = archEl.getBoundingClientRect();
+
+      // #gr-flight — фронтальное, неискажённое изображение арки
+      // (arches-new/2.png). Проблема, которую это чинит: если бы scale()
+      // дописывался поверх matrix3d самой #arch-2 (как было раньше), вместе
+      // с масштабом рос бы и её shear/перекос, и наезд камеры читался бы
+      // как улёт по диагонали, а не как ровный полёт вперёд.
+      const flight = document.createElement('div');
+      flight.id = 'gr-flight';
+      flight.style.left = `${rect.left}px`;
+      flight.style.top = `${rect.top}px`;
+      flight.style.width = `${rect.width}px`;
+      flight.style.height = `${rect.height}px`;
+      const flightImg = document.createElement('img');
+      flightImg.src = 'arches-new/2.png';
+      flightImg.alt = '';
+      flightImg.draggable = false;
+      flight.appendChild(flightImg);
+      document.body.appendChild(flight);
+
+      // Мгновенный (~100ms) cross-fade: косая арка в стене прячется (CSS-
+      // transition на .gr-hide), на её месте тут же появляется ровная
+      // фронтальная (через GSAP, чтобы не смешивать с CSS-transition,
+      // который потом будет управлять этим же opacity в фазе 3) — глаз
+      // читает это как "арка развернулась к нам лицом", а не как подмену.
+      archEl.classList.add('gr-hide');
+      gsap.to(flight, { opacity: 1, duration: 0.1, ease: 'none' });
+
+      const cleanup = () => {
+        flight.remove();
+        archEl.classList.remove('gr-hide');
+      };
+
+      // Cross-fade #gr-flight → <video>: включаем видео и мгновенно (без
+      // штатного 0.5s CSS-transition, см. .gr-instant) прогоняем его opacity
+      // 0→1 за duration секунд через GSAP, синхронно с гашением #gr-flight.
+      const startVideoCrossfade = (duration) => {
+        grVideo.currentTime = 0;
+        grVideo.play().catch(() => {}); // клик по арке уже был пользовательским жестом, autoplay не должен блокироваться
+        grOverlay.classList.add('active', 'gr-instant');
+        gsap.set(grOverlay, { opacity: 0 });
+        gsap.to(grOverlay, {
+          opacity: 1,
+          duration,
+          ease: 'none',
+          onComplete: () => {
+            // Возвращаем управление opacity обратно CSS-классу (тот же,
+            // которым пользуется exitGlobalReserve), чтобы штатный fade-out
+            // на Escape снова работал через обычный CSS-transition.
+            grOverlay.classList.add('video-visible');
+            grOverlay.classList.remove('gr-instant');
+            gsap.set(grOverlay, { clearProps: 'opacity' });
+          },
+        });
+      };
+
+      if (reduceMotionQuery.matches) {
+        // Пропускаем фазы 1-2 (scale/blur) целиком — сразу cross-fade
+        // фронтальной картинки в видео.
+        startVideoCrossfade(0.3);
+        gsap.to(flight, { opacity: 0, duration: 0.3, ease: 'none', onComplete: cleanup });
+        return;
+      }
+
+      // Масштаб считаем от реального рендер-размера арки, чтобы кадр
+      // гарантированно перекрыл весь вьюпорт (с небольшим запасом).
+      const fillScale = Math.max(window.innerWidth / rect.width, window.innerHeight / rect.height) * 1.05;
+
+      const PHASE1 = 1.4 * 0.20; // ~0.28s — предвкушение
+      const PHASE2 = 1.4 * 0.55; // ~0.77s — разгон камеры
+      const PHASE3 = 1.4 * 0.25; // ~0.35s — засветка гаснет + cross-fade в видео
+
+      gsap.set(flightImg, { scale: 1, transformOrigin: '50% 50%', filter: 'blur(0px) brightness(1)' });
+
+      const tl = gsap.timeline({ onComplete: cleanup });
+      // Фаза 1: лёгкое приближение перед рывком.
+      tl.to(flightImg, { scale: 1.15, ease: 'power1.in', duration: PHASE1 });
+      // Фаза 2: резкий разгон — масштаб перекрывает весь экран, motion blur
+      // нарастает со скоростью движения, свет усиливается ("вылет на свет").
+      tl.to(flightImg, {
+        scale: fillScale,
+        filter: 'blur(14px) brightness(1.6)',
+        ease: 'power2.in',
+        duration: PHASE2,
+      });
+      // Фаза 3: blur/brightness резко гасятся РОВНО в момент cross-fade в
+      // видео — пик засветки маскирует стык между статичной картинкой и
+      // первым кадром видео, стык не читается глазом как скачок.
+      tl.addLabel('phase3');
+      tl.to(flightImg, {
+        filter: 'blur(0px) brightness(1)',
+        ease: 'power2.out',
+        duration: PHASE3,
+        onStart: () => startVideoCrossfade(PHASE3),
+      }, 'phase3');
+      tl.to(flight, { opacity: 0, duration: PHASE3, ease: 'power2.out' }, 'phase3');
+    }
+
+    function exitGlobalReserve() {
+      if (!grActive) return;
+      grActive = false;
+      // На случай Escape посреди ещё не отыгравшего таймлайна — снимаем
+      // все активные твины и не оставляем #gr-flight в DOM.
+      gsap.killTweensOf('#gr-flight, #gr-flight img, #gr-arrival');
+      const flight = document.getElementById('gr-flight');
+      if (flight) flight.remove();
+      grOverlay.classList.remove('video-visible', 'gr-instant');
+      gsap.set(grOverlay, { clearProps: 'opacity' });
+      document.body.classList.remove('gr-entering');
+      if (arch2) arch2.classList.remove('gr-hide'); // возвращаем реальную арку в стене к opacity:1
+      // Обратный cross-fade без zoom-out (по ТЗ) — просто fade, ждём его конца перед сбросом видео.
+      setTimeout(() => {
+        if (grOverlay) grOverlay.classList.remove('active');
+        if (grVideo) { grVideo.pause(); grVideo.currentTime = 0; }
+      }, 500);
+    }
+
     document.addEventListener('keydown', (event) => {
+      if (grActive) {
+        if (event.key === 'Escape') exitGlobalReserve();
+        return;
+      }
       if (!isOpen) return;
 
       if (event.key === 'Escape') {
@@ -783,7 +1030,7 @@
 
       arch.addEventListener('pointerenter', (event) => {
         if (event.pointerType && event.pointerType !== 'mouse') return;
-        if (isOpen) return;
+        if (isOpen || grActive) return;
         hoveredArch = arch;
         recomputeElevated();
       });
@@ -805,14 +1052,16 @@
       });
 
       arch.addEventListener('click', () => {
-        if (isOpen) return;
+        if (isOpen || grActive) return;
+        if (sectionKey === 'globalReserve') { enterGlobalReserve(arch); return; }
         openModal(sectionKey, arch);
       });
 
       arch.addEventListener('keydown', (event) => {
         if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return;
         event.preventDefault(); // Space не должен прокручивать страницу
-        if (isOpen) return;
+        if (isOpen || grActive) return;
+        if (sectionKey === 'globalReserve') { enterGlobalReserve(arch); return; }
         openModal(sectionKey, arch);
       });
     }

@@ -186,15 +186,14 @@
   #arch-6 .arch-hit{ clip-path: polygon(16.98% 0%, 84.43% 0%, 100% 27.01%, 100% 96.92%, 96.86% 100%, 3.00% 100%, 0% 96.92%, 0% 26.39%); }
 
   /* ---------- Global Reserve — вход в Scene 0 (см. #gr-arrival ниже) ----------
-     На время влёта в арку "Global Reserve" гасим остальные 5 арок и
-     общий hover-слой (кастомный курсор), чтобы ничего не отвлекало от
-     арки, в которую "влетает" камера, и чтобы под overlay не оставалось
-     кликабельных/наводимых элементов. Сам arch-2 сюда не входит — он в
-     это время сначала быстро прячется (см. .gr-hide), а на его месте
-     "летит" фронтальная картинка #gr-flight (см. ниже). */
+     На время влёта в арку "Global Reserve" остальные 5 арок перестают
+     быть кликабельными/наводимыми, но визуально не пропадают — их (вместе
+     со всем фоном) притемняет общий слой #gr-dim ниже, как будто в
+     комнате приглушили свет, а не как будто их выключили по отдельности.
+     Сам arch-2 сюда не входит — он в это время сначала быстро прячется
+     (см. .gr-hide), а на его месте "летит" фронтальная картинка #gr-flight
+     (см. ниже), которая должна остаться яркой поверх затемнения. */
   body.gr-entering .arch-interactive:not(#arch-2){
-    transition:opacity 0.35s ease;
-    opacity:0;
     pointer-events:none;
   }
   body.gr-entering .cursor-dot,
@@ -275,6 +274,27 @@
   @media (prefers-reduced-motion: reduce){
     #gr-arrival{ transition:opacity 0.3s ease, visibility 0s linear 0.3s; }
     #gr-arrival.video-visible{ transition:opacity 0.3s ease, visibility 0s linear 0s; }
+  }
+
+  /* ---------- Global Reserve — общее притемнение сцены ----------
+     Один слой на весь фон+все арки (вместо того чтобы гасить каждую
+     арку по отдельности через opacity) — читается как "приглушили свет
+     в комнате", а сама летящая арка (#gr-flight, z-index 75) остаётся
+     ярче этого слоя, потому что лежит выше него. */
+  #gr-dim{
+    position:fixed;
+    inset:0;
+    z-index:65; /* выше сцены и всех арок (z-index арок максимум 50), ниже #gr-flight (75) */
+    background:#000;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity 0.4s ease;
+  }
+  body.gr-entering #gr-dim{
+    opacity:0.6;
+  }
+  @media (prefers-reduced-motion: reduce){
+    #gr-dim{ transition:none; }
   }
 
   #guideSvg{ position:absolute; top:0; left:0; width:3688px; height:905px; pointer-events:none; display:none; }
@@ -522,6 +542,9 @@
   <!-- TODO: Gia появляется начиная со Scene 1 (см. PDF-скрипт), в Scene 0
        сознательно отсутствует в этой версии -->
 </div>
+
+<!-- Общее притемнение сцены на время влёта в Global Reserve — см. #gr-dim в CSS. -->
+<div id="gr-dim" aria-hidden="true"></div>
 
 <!-- Кастомный курсор: тоже прямой потомок body, вне трансформированной сцены. -->
 <div class="cursor-dot" aria-hidden="true"></div>
@@ -931,9 +954,19 @@
         return;
       }
 
-      // Масштаб считаем от реального рендер-размера арки, чтобы кадр
-      // гарантированно перекрыл весь вьюпорт (с небольшим запасом).
-      const fillScale = Math.max(window.innerWidth / rect.width, window.innerHeight / rect.height) * 1.05;
+      // Масштаб считаем не от простого отношения viewport/rect (оно
+      // предполагает, что арка стоит по центру экрана), а от реального
+      // "недостающего" расстояния до дальнего края вьюпорта в каждую
+      // сторону от центра арки — иначе для арок, смещённых к краю экрана
+      // (как большинство из 6), кадр не перекрывал бы весь вьюпорт.
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const neededHalfW = Math.max(centerX, window.innerWidth - centerX);
+      const neededHalfH = Math.max(centerY, window.innerHeight - centerY);
+      const fillScale = Math.max(
+        (neededHalfW * 2) / rect.width,
+        (neededHalfH * 2) / rect.height
+      ) * 1.05;
 
       const PHASE1 = 1.4 * 0.20; // ~0.28s — предвкушение
       const PHASE2 = 1.4 * 0.55; // ~0.77s — разгон камеры
